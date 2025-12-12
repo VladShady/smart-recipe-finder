@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom'
 
 const STAPLES = ['water', 'salt', 'oil', 'sugar', 'pepper', 'flour'];
 
+const POPULAR_CATEGORIES = [
+  'Breakfast', 'Dessert', 'Pasta', 'Seafood', 'Vegetarian', 
+  'Chicken', 'Beef', 'Pork', 'Starter', 'Side'
+];
+
 function Home() {
   const [inputText, setInputText] = useState("") 
   const [suggestions, setSuggestions] = useState([]) 
@@ -12,11 +17,15 @@ function Home() {
     const saved = sessionStorage.getItem('myIngredients');
     return saved ? JSON.parse(saved) : [];
   });
-
   const [recipes, setRecipes] = useState(() => {
     const saved = sessionStorage.getItem('myRecipes');
     return saved ? JSON.parse(saved) : [];
   });
+
+  const [categories, setCategories] = useState([]); 
+  const [selectedCategory, setSelectedCategory] = useState(""); 
+  
+  const [maxTime, setMaxTime] = useState(120); 
 
   useEffect(() => {
     sessionStorage.setItem('myIngredients', JSON.stringify(selectedIngredients));
@@ -26,14 +35,32 @@ function Home() {
   useEffect(() => {
     if (selectedIngredients.length === 0) {
       setRecipes([]);
+      setCategories([]);
+      setSelectedCategory("");
+      return;
     }
+    const fetchCategories = async () => {
+      try {
+        const ids = selectedIngredients.map(i => i.id);
+        const res = await fetch('http://localhost:5000/api/categories/available', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ingredientIds: ids })
+        });
+        const data = await res.json();
+        setCategories(data);
+        if (selectedCategory && !data.includes(selectedCategory)) {
+          setSelectedCategory("");
+        }
+      } catch (err) { console.error(err); }
+    };
+    fetchCategories();
   }, [selectedIngredients]);
 
   const handleInputChange = async (e) => {
     const text = e.target.value;
     setInputText(text);
     setActiveIndex(-1); 
-
     if (text.length > 1) {
       try {
         const res = await fetch(`http://localhost:5000/api/ingredients/search?query=${text}`);
@@ -48,18 +75,15 @@ function Home() {
     if (e.key === 'ArrowDown') {
       e.preventDefault(); 
       setActiveIndex(prev => (prev < suggestions.length - 1 ? prev + 1 : prev));
-    } 
-    else if (e.key === 'ArrowUp') {
+    } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActiveIndex(prev => (prev > 0 ? prev - 1 : -1));
-    } 
-    else if (e.key === 'Enter') {
+    } else if (e.key === 'Enter') {
       e.preventDefault();
       if (activeIndex >= 0 && suggestions[activeIndex]) {
         addIngredient(suggestions[activeIndex]);
       }
-    }
-    else if (e.key === 'Escape') setSuggestions([]); 
+    } else if (e.key === 'Escape') setSuggestions([]); 
   }
 
   const addIngredient = (ingredient) => {
@@ -78,30 +102,20 @@ function Home() {
   const calculateStats = (recipe, myIngredients) => {
     let essentialTotal = 0;
     let essentialMatch = 0;
-
     if (recipe.ingredients_list) {
       recipe.ingredients_list.forEach(line => {
         const lineLower = line.toLowerCase();
         const isStaple = STAPLES.some(staple => lineLower.includes(staple));
-        
         if (!isStaple) {
           essentialTotal++;
           const hasItem = myIngredients.some(myIng => 
             lineLower.includes(myIng.name.toLowerCase())
           );
-          
-          if (hasItem) {
-            essentialMatch++;
-          }
+          if (hasItem) { essentialMatch++; }
         }
       });
     }
-
-    return {
-      essentialTotal,
-      essentialMatch,
-      missingCount: essentialTotal - essentialMatch
-    };
+    return { essentialTotal, essentialMatch, missingCount: essentialTotal - essentialMatch };
   };
 
   const handleSearchRecipes = async () => {
@@ -110,7 +124,11 @@ function Home() {
     const res = await fetch('http://localhost:5000/api/recipes/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ingredientIds: ids })
+        body: JSON.stringify({ 
+          ingredientIds: ids,
+          category: selectedCategory || null,
+          maxTime: maxTime
+        })
     });
     const serverData = await res.json();
 
@@ -133,7 +151,7 @@ function Home() {
     <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto', fontFamily: 'Arial' }}>
       <h1>Smart Recipe Finder 🍳</h1>
       
-      <div style={{ position: 'relative', marginBottom: '20px' }}>
+      <div style={{ position: 'relative', marginBottom: '10px' }}>
         <input 
           type="text" 
           placeholder="Type an ingredient (e.g. 'chicken')..." 
@@ -142,7 +160,6 @@ function Home() {
           onKeyDown={handleKeyDown} 
           style={{ width: '100%', padding: '15px', fontSize: '18px', borderRadius: '8px', border: '1px solid #ccc' }}
         />
-        
         {suggestions.length > 0 && (
           <ul style={{ 
             listStyle: 'none', padding: 0, margin: 0, 
@@ -157,9 +174,7 @@ function Home() {
                   onClick={() => addIngredient(ing)}
                   onMouseEnter={() => setActiveIndex(index)} 
                   style={{ 
-                    padding: '10px', 
-                    cursor: 'pointer', 
-                    borderBottom: '1px solid #eee',
+                    padding: '10px', cursor: 'pointer', borderBottom: '1px solid #eee',
                     backgroundColor: isActive ? '#f0f0f0' : 'white'
                   }}
                 >
@@ -169,6 +184,52 @@ function Home() {
             })}
           </ul>
         )}
+      </div>
+
+      <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'center' }}>
+        
+        <div style={{ flex: 1 }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', color: '#666' }}>Category:</label>
+            <select 
+            value={selectedCategory} 
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            disabled={categories.length === 0}
+            style={{ 
+                width: '100%', 
+                padding: '10px', 
+                borderRadius: '8px', 
+                border: '1px solid #ccc', 
+                fontSize: '16px', 
+                backgroundColor: categories.length === 0 ? '#f5f5f5' : 'white',
+                color: categories.length === 0 ? '#888' : 'black'
+            }}
+            >
+            <option value="">
+                {categories.length === 0 ? "Add ingredients..." : "All Categories"}
+            </option>
+            {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+            ))}
+            </select>
+        </div>
+
+        <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                <label style={{ fontSize: '14px', color: '#666' }}>Max Time:</label>
+                <span style={{ fontWeight: 'bold', color: '#2196F3' }}>
+                    {maxTime === 120 ? "120+ min" : `${maxTime} min`}
+                </span>
+            </div>
+            <input 
+                type="range" 
+                min="10" 
+                max="120" 
+                step="5" 
+                value={maxTime} 
+                onChange={(e) => setMaxTime(Number(e.target.value))}
+                style={{ width: '100%', cursor: 'pointer', accentColor: '#2196F3' }}
+            />
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px', minHeight: '40px' }}>
@@ -192,7 +253,6 @@ function Home() {
       </button>
 
       <div style={{ marginTop: '30px' }}>
-        
         {selectedIngredients.length === 0 && (
           <div style={{ textAlign: 'center', color: '#888', padding: '40px 20px', border: '2px dashed #eee', borderRadius: '10px' }}>
             <div style={{ fontSize: '48px', marginBottom: '10px' }}>🥗</div>
@@ -212,7 +272,6 @@ function Home() {
              {recipes.map(r => (
                <Link to={`/recipe/${r.id}`} key={r.id} style={{ textDecoration: 'none', color: 'inherit' }}>
                  <div style={{ border: '1px solid #eee', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', cursor: 'pointer', transition: 'transform 0.2s', height: '100%', backgroundColor: 'white', position: 'relative' }}>
-                    
                     <div style={{ 
                       position: 'absolute', top: '10px', right: '10px', 
                       backgroundColor: r.missingCount === 0 ? '#4CAF50' : '#FF9800',
@@ -221,11 +280,12 @@ function Home() {
                     }}>
                       {r.missingCount === 0 ? "Ready to Cook! 🔥" : `Missing ${r.missingCount} items`}
                     </div>
-
                     {r.image_url && <img src={r.image_url} alt={r.title} style={{width: '100%', height: '150px', objectFit: 'cover'}} />}
                     <div style={{ padding: '10px' }}>
                       <h3 style={{ margin: '0 0 5px 0', fontSize: '16px' }}>{r.title}</h3>
-                      
+                      <p style={{ margin: '5px 0', fontSize: '12px', color: '#555', fontStyle: 'italic' }}>
+                        {r.description} • ⏱ {r.time_minutes} min
+                      </p>
                       <span style={{ fontSize: '12px', color: '#888' }}>
                         You have {r.essentialMatch} / {r.essentialTotal} ingredients (excluding staples)
                       </span>
@@ -235,7 +295,6 @@ function Home() {
              ))}
           </div>
         )}
-
       </div>
     </div>
   )

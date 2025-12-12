@@ -13,6 +13,18 @@ app.get('/', (req, res) => {
   res.send('Server is running. API is ready.');
 });
 
+app.get('/api/categories', async (req, res) => {
+  try {
+    const categories = await pool.query(
+      'SELECT DISTINCT description FROM recipes WHERE description IS NOT NULL ORDER BY description'
+    );
+    res.json(categories.rows.map(row => row.description));
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
 app.get('/api/ingredients', async (req, res) => {
   try {
     const allIngredients = await pool.query('SELECT * FROM ingredients');
@@ -27,7 +39,8 @@ const STAPLES = ['%water%', '%salt%', '%oil%', '%sugar%', '%pepper%', '%flour%']
 
 app.post('/api/recipes/search', async (req, res) => {
   try {
-    const { ingredientIds } = req.body;
+    const { ingredientIds, category, maxTime } = req.body;
+    
     if (!ingredientIds || ingredientIds.length === 0) return res.json([]);
 
     const query = `
@@ -62,6 +75,10 @@ app.post('/api/recipes/search', async (req, res) => {
       JOIN recipe_ingredients ri ON r.id = ri.recipe_id
       JOIN ingredients i ON ri.ingredient_id = i.id
       WHERE rs.essential_match > 0 
+      
+      AND ($3::text IS NULL OR r.description = $3)
+      AND ($4::int IS NULL OR r.time_minutes <= $4)
+
       GROUP BY 
         r.id, r.title, r.time_minutes, r.description, r.image_url, r.instructions,
         rs.essential_total, rs.essential_match
@@ -69,7 +86,13 @@ app.post('/api/recipes/search', async (req, res) => {
       LIMIT 50;
     `;
 
-    const result = await pool.query(query, [ingredientIds, STAPLES]);
+    const result = await pool.query(query, [
+      ingredientIds, 
+      STAPLES, 
+      category || null,
+      maxTime || null
+    ]);
+    
     res.json(result.rows);
   } catch (err) {
     console.error("SQL Error:", err.message);
@@ -80,14 +103,11 @@ app.post('/api/recipes/search', async (req, res) => {
 app.get('/api/ingredients/search', async (req, res) => {
   try {
     const { query } = req.query;
-    
     if (!query) return res.json([]);
-
     const result = await pool.query(
       "SELECT * FROM ingredients WHERE name ILIKE $1 LIMIT 10", 
       [`%${query}%`] 
     );
-    
     res.json(result.rows);
   } catch (err) {
     console.error(err.message);
@@ -98,7 +118,6 @@ app.get('/api/ingredients/search', async (req, res) => {
 app.get('/api/recipes/:id', async (req, res) => {
   try {
     const { id } = req.params;
-
     const query = `
       SELECT r.id, r.title, r.time_minutes, r.description, r.image_url, r.instructions,
              array_agg(ri.quantity || ' ' || i.name) as ingredients_list
@@ -108,14 +127,37 @@ app.get('/api/recipes/:id', async (req, res) => {
       WHERE r.id = $1
       GROUP BY r.id
     `;
-
     const result = await pool.query(query, [id]);
-
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Recipe not found" });
     }
-    
     res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+app.post('/api/categories/available', async (req, res) => {
+  try {
+    const { ingredientIds } = req.body;
+    
+    if (!ingredientIds || ingredientIds.length === 0) {
+      return res.json([]);
+    }
+
+    const query = `
+      SELECT DISTINCT r.description as category
+      FROM recipes r
+      JOIN recipe_ingredients ri ON r.id = ri.recipe_id
+      WHERE ri.ingredient_id = ANY($1)
+      AND r.description IS NOT NULL
+      ORDER BY r.description
+    `;
+
+    const result = await pool.query(query, [ingredientIds]);
+    
+    res.json(result.rows.map(row => row.category));
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Server Error");
