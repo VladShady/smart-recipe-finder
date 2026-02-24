@@ -22,7 +22,7 @@ function estimateCookingTime(category) {
 }
 
 async function fetchAndSave() {
-  console.log("Starting import with time generation...");
+  console.log("Starting import with time generation and video links...");
   let client = await pool.connect();
 
   try {
@@ -37,15 +37,17 @@ async function fetchAndSave() {
       for (const meal of meals) {
         const time = estimateCookingTime(meal.strCategory);
 
+        // --- ОНОВЛЕНО: Тепер ми додаємо youtube_url ---
         const recipeRes = await client.query(
-          `INSERT INTO recipes (title, description, instructions, time_minutes, image_url) 
-           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+          `INSERT INTO recipes (title, description, instructions, time_minutes, image_url, youtube_url) 
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
           [
             meal.strMeal,
             meal.strCategory,
             meal.strInstructions,
             time,
-            meal.strMealThumb
+            meal.strMealThumb,
+            meal.strYoutube || null // Якщо відео немає, запишемо NULL
           ]
         );
         const recipeId = recipeRes.rows[0].id;
@@ -74,7 +76,7 @@ async function fetchAndSave() {
             [recipeId, ingredientId, cleanMeasure]
           );
         }
-        console.log(`[${time} min] ${meal.strMeal}`);
+        console.log(`[${time} min] ${meal.strMeal} (Video: ${meal.strYoutube ? 'Yes' : 'No'})`);
       }
     }
     console.log("Import finished successfully!");
