@@ -1,12 +1,16 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-
-const STAPLES = ['water', 'salt', 'oil', 'sugar', 'pepper', 'flour'];
+import { useTheme } from './context/ThemeContext';
+import RecipeCard from './components/RecipeCard';
+import HeroSection from './components/home/HeroSection';
+import { STAPLES } from './constants';
 
 function Home() {
+  // State management with session persistence
   const [inputText, setInputText] = useState("") 
   const [suggestions, setSuggestions] = useState([]) 
   const [activeIndex, setActiveIndex] = useState(-1)
+  const [isLoading, setIsLoading] = useState(false);
 
   const [selectedIngredients, setSelectedIngredients] = useState(() => {
     const saved = sessionStorage.getItem('myIngredients');
@@ -30,35 +34,28 @@ function Home() {
   const [categories, setCategories] = useState([]); 
   const [popularRecipes, setPopularRecipes] = useState([]);
 
-  // --- СТАН: Темна/Світла тема ---
-  const [isDark, setIsDark] = useState(() => {
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) {
-      return savedTheme === 'dark';
-    }
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
-
   const searchSectionRef = useRef(null);
+  const resultsSectionRef = useRef(null);
+  const debounceTimer = useRef(null); // Timer reference for debouncing search input
 
-  // --- НОВИЙ EFFECT: Автоматичний скрол при поверненні ---
+  // Auto-scroll on component mount when returning from recipe details
   useEffect(() => {
-    // Якщо користувач вже має вибрані інгредієнти (тобто повернувся з рецепту)
     if (selectedIngredients.length > 0 && searchSectionRef.current) {
-      // Використовуємо setTimeout, щоб React встиг відмалювати всі блоки перед скролом
       setTimeout(() => {
         searchSectionRef.current.scrollIntoView({ behavior: 'auto', block: 'start' });
       }, 50);
     }
-  }, []); // Порожній масив означає, що це спрацює лише один раз при завантаженні
+  }, []);
 
+  // Initial fetch for popular recipes
   useEffect(() => {
-    fetch('http://localhost:5000/api/recipes/popular')
+    fetch(`http://${window.location.hostname}:5000/api/recipes/popular`)
       .then(res => res.json())
       .then(data => setPopularRecipes(data))
       .catch(err => console.error("Error fetching popular recipes:", err));
   }, []);
 
+  // Persist user session data
   useEffect(() => {
     sessionStorage.setItem('myIngredients', JSON.stringify(selectedIngredients));
     sessionStorage.setItem('myRecipes', JSON.stringify(recipes));
@@ -67,11 +64,7 @@ function Home() {
     sessionStorage.setItem('myHasSearched', hasSearched.toString());
   }, [selectedIngredients, recipes, selectedCategory, maxTime, hasSearched]);
 
-  useEffect(() => {
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    document.body.style.backgroundColor = isDark ? '#111827' : '#F9FAFB';
-  }, [isDark]);
-
+  // Fetch available categories dynamically based on selected ingredients
   useEffect(() => {
     if (selectedIngredients.length === 0) {
       setRecipes([]);
@@ -83,7 +76,7 @@ function Home() {
     const fetchCategories = async () => {
       try {
         const ids = selectedIngredients.map(i => i.id);
-        const res = await fetch('http://localhost:5000/api/categories/available', {
+        const res = await fetch(`http://${window.location.hostname}:5000/api/categories/available`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ingredientIds: ids })
@@ -98,19 +91,32 @@ function Home() {
     fetchCategories();
   }, [selectedIngredients]);
 
-  const handleInputChange = async (e) => {
+  // Handle autocomplete input with debouncing
+  const handleInputChange = (e) => {
     const text = e.target.value;
     setInputText(text);
     setActiveIndex(-1); 
-    if (text.length > 1) {
-      try {
-        const res = await fetch(`http://localhost:5000/api/ingredients/search?query=${text}`);
-        const data = await res.json();
-        setSuggestions(data);
-      } catch (err) { console.error(err); }
-    } else { setSuggestions([]); }
-  }
 
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    if (text.length > 1) {
+      debounceTimer.current = setTimeout(async () => {
+        try {
+          const res = await fetch(`http://${window.location.hostname}:5000/api/ingredients/search?query=${text}`);
+          const data = await res.json();
+          setSuggestions(data);
+        } catch (err) { 
+          console.error(err); 
+        }
+      }, 300);
+    } else { 
+      setSuggestions([]); 
+    }
+  };
+
+  // Keyboard navigation for search suggestions
   const handleKeyDown = (e) => {
     if (suggestions.length === 0) return;
     if (e.key === 'ArrowDown') {
@@ -130,16 +136,22 @@ function Home() {
   const addIngredient = (ingredient) => {
     if (!selectedIngredients.find(item => item.id === ingredient.id)) {
       setSelectedIngredients([...selectedIngredients, ingredient]);
-      setHasSearched(false);
     }
     setInputText("");
     setSuggestions([]);
     setActiveIndex(-1); 
   }
 
+  const handleAddClick = () => {
+    if (activeIndex >= 0 && suggestions[activeIndex]) {
+      addIngredient(suggestions[activeIndex]);
+    } else if (suggestions.length > 0) {
+      addIngredient(suggestions[0]);
+    }
+  }
+
   const removeIngredient = (id) => {
     setSelectedIngredients(selectedIngredients.filter(item => item.id !== id));
-    setHasSearched(false);
   }
 
   const handleReset = () => {
@@ -152,6 +164,7 @@ function Home() {
     setSuggestions([]);
   }
 
+  // Calculate missing and matching ingredients for recipe scoring
   const calculateStats = (recipe, myIngredients) => {
     let essentialTotal = 0;
     let essentialMatch = 0;
@@ -171,34 +184,54 @@ function Home() {
     return { essentialTotal, essentialMatch, missingCount: essentialTotal - essentialMatch };
   };
 
-  const handleSearchRecipes = async () => {
-    setHasSearched(true);
-    const ids = selectedIngredients.map(i => i.id);
-    
-    const res = await fetch('http://localhost:5000/api/recipes/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          ingredientIds: ids,
-          category: selectedCategory || null,
-          maxTime: maxTime 
-        })
-    });
-    const serverData = await res.json();
+  const processedRecipes = useMemo(() => {
+    if (!recipes || recipes.length === 0) return [];
 
-    const processedRecipes = serverData.map(recipe => {
+    const processed = recipes.map(recipe => {
       const stats = calculateStats(recipe, selectedIngredients);
       return { ...recipe, ...stats }; 
     });
 
-    processedRecipes.sort((a, b) => {
+    return processed.sort((a, b) => {
       if (a.missingCount !== b.missingCount) {
         return a.missingCount - b.missingCount;
       }
-      return b.essentialMatch - a.essentialMatch;
+      if (a.essentialMatch !== b.essentialMatch) {
+        return b.essentialMatch - a.essentialMatch;
+      }
+    
+      return a.id - b.id; 
     });
+  }, [recipes, selectedIngredients]);
 
-    setRecipes(processedRecipes);
+  const handleSearchRecipes = async () => {
+    setHasSearched(true);
+    setIsLoading(true);
+    await new Promise(r => setTimeout(r, 1000));
+    
+    const ids = selectedIngredients.map(i => i.id);
+    
+    try {
+      const res = await fetch(`http://${window.location.hostname}:5000/api/recipes/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            ingredientIds: ids,
+            category: selectedCategory || null,
+            maxTime: maxTime 
+          })
+      });
+      const serverData = await res.json();
+      setRecipes(serverData);
+
+      setTimeout(() => {
+        resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+    } catch (err) {
+      console.error("Помилка пошуку:", err);
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   const scrollToSearch = () => {
@@ -208,202 +241,83 @@ function Home() {
   const showResults = hasSearched && recipes.length > 0;
   const showPopular = !hasSearched && popularRecipes.length > 0;
 
-  const themeStyles = {
-    '--bg-color': isDark ? '#111827' : '#F9FAFB',         
-    '--card-bg': isDark ? '#1F2937' : '#FFFFFF',          
-    '--text-main': isDark ? '#F9FAFB' : '#111827',        
-    '--text-muted': isDark ? '#9CA3AF' : '#6B7280',       
-    '--border-color': isDark ? '#374151' : '#E5E7EB',     
-    '--input-bg': isDark ? '#111827' : '#FFFFFF',         
-    '--input-border': isDark ? '#4B5563' : '#D1D5DB',     
-    '--hover-bg': isDark ? '#374151' : '#F3F4F6',         
-    '--tag-bg': isDark ? 'rgba(16, 185, 129, 0.2)' : '#D1FAE5', 
-    '--tag-text': isDark ? '#34D399' : '#065F46',         
-    '--error-bg': isDark ? 'rgba(239, 68, 68, 0.1)' : '#FEF2F2',
-    '--error-border': isDark ? '#7F1D1D' : '#FCA5A5',
-    '--error-text': isDark ? '#FCA5A5' : '#B91C1C',
-    '--error-sub': isDark ? '#F87171' : '#991B1B',
-    '--shadow': isDark ? '0 10px 15px -3px rgba(0, 0, 0, 0.5)' : '0 10px 15px -3px rgba(0, 0, 0, 0.05)',
-    minHeight: '100vh',
-    backgroundColor: 'var(--bg-color)',
-    color: 'var(--text-main)',
-    fontFamily: '"Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-    transition: 'background-color 0.3s ease, color 0.3s ease'
-  };
-
   return (
-    <div style={themeStyles}>
-      
-      <button 
-        onClick={() => setIsDark(!isDark)}
-        style={{
-          position: 'fixed', top: '20px', right: '20px', zIndex: 1000,
-          background: 'var(--card-bg)', border: '1px solid var(--border-color)',
-          borderRadius: '50%', width: '44px', height: '44px',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', color: 'var(--text-main)',
-          boxShadow: 'var(--shadow)', transition: 'all 0.2s ease'
-        }}
-        aria-label="Toggle Theme"
-      >
-        {isDark ? (
-          <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-        ) : (
-          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
-        )}
-      </button>
+    <div>
+      <HeroSection onStartSearch={scrollToSearch} />
 
-      <style>{`
-        html, body {
-          margin: 0;
-          padding: 0;
-          background-color: ${isDark ? '#111827' : '#F9FAFB'};
-          transition: background-color 0.3s ease;
-        }
-        .custom-input, .custom-select {
-          background-color: var(--input-bg);
-          color: var(--text-main);
-          border: 1px solid var(--input-border);
-          transition: all 0.2s ease;
-        }
-        .custom-input::placeholder { color: var(--text-muted); }
-        .custom-input:focus, .custom-select:focus {
-          outline: none;
-          border-color: #10B981 !important;
-          box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2) !important;
-        }
-        .btn-primary { transition: all 0.2s ease; }
-        .btn-primary:hover:not(:disabled) {
-          background-color: #059669 !important;
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-        }
-        .btn-secondary { transition: all 0.2s ease; }
-        .btn-secondary:hover:not(:disabled) {
-          background-color: var(--hover-bg) !important;
-        }
-        .ingredient-tag { transition: all 0.2s ease; }
-        .ingredient-tag:hover { opacity: 0.8; }
-        .recipe-card {
-          background-color: var(--card-bg);
-          border: 1px solid var(--border-color);
-          transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-        .recipe-card:hover {
-          transform: translateY(-4px);
-          box-shadow: var(--shadow);
-        }
-        .fade-in { animation: fadeIn 0.6s ease-out forwards; }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(15px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .step-card {
-          flex: 1; min-width: 250px; text-align: center; padding: 20px;
-        }
-        .icon-wrapper {
-          width: 48px; height: 48px; background-color: var(--tag-bg); color: #10B981;
-          border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto;
-        }
-        .suggestion-item:hover { background-color: var(--hover-bg) !important; }
-      `}</style>
-
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-        
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', backgroundColor: 'var(--card-bg)', borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.3s ease' }}>
-          <div className="fade-in" style={{ textAlign: 'center', maxWidth: '800px', width: '100%' }}>
-            <h1 style={{ margin: '0 0 16px 0', fontSize: 'clamp(36px, 5vw, 56px)', fontWeight: '800', letterSpacing: '-1px', lineHeight: '1.2' }}>
-              Turn your ingredients into <br/><span style={{ color: '#10B981' }}>delicious meals.</span>
-            </h1>
-            <p style={{ margin: '0 auto 32px auto', color: 'var(--text-muted)', fontSize: 'clamp(16px, 2vw, 18px)', maxWidth: '540px', lineHeight: '1.6' }}>
-              Stop wasting food and wondering what to cook. Just tell us what you have in your pantry, and we'll do the magic.
-            </p>
-            <button 
-              className="btn-primary"
-              onClick={scrollToSearch}
-              style={{ padding: '16px 36px', background: '#10B981', color: 'white', border: 'none', borderRadius: '10px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}
-            >
-              Start Searching
-            </button>
-          </div>
-        </div>
-
-        <div style={{ padding: '40px 20px', backgroundColor: 'var(--bg-color)', transition: 'background-color 0.3s ease' }}>
-          <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <div className="step-card">
-              <div className="icon-wrapper">
-                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
-              </div>
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: '600' }}>1. Check your fridge</h3>
-              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '14px', lineHeight: '1.5' }}>Add the ingredients you already have at home to your virtual pantry.</p>
-            </div>
-
-            <div className="step-card">
-              <div className="icon-wrapper">
-                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
-              </div>
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: '600' }}>2. Set your filters</h3>
-              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '14px', lineHeight: '1.5' }}>Choose a category and set how much time you want to spend cooking.</p>
-            </div>
-
-            <div className="step-card">
-              <div className="icon-wrapper">
-                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              </div>
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: '600' }}>3. Cook & Enjoy</h3>
-              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '14px', lineHeight: '1.5' }}>Get matching recipes, follow the instructions, and enjoy your meal.</p>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <div ref={searchSectionRef} style={{ padding: '60px 20px 40px' }}>
-        <div style={{ maxWidth: '800px', margin: '0 auto', backgroundColor: 'var(--card-bg)', padding: '40px', borderRadius: '16px', boxShadow: 'var(--shadow)', transition: 'all 0.3s ease' }}>
+      {/* Main Search Interface */}
+      <div className="search-card-container" ref={searchSectionRef} style={{ padding: '60px 20px 40px', scrollMarginTop: '80px' }}>
+        <div style={{ maxWidth: '920px', margin: '0 auto', backgroundColor: 'var(--card-bg)', padding: '40px', borderRadius: '16px', boxShadow: 'var(--shadow)', transition: 'all 0.3s ease' }}>
           
           <h2 style={{ margin: '0 0 24px 0', fontSize: '24px', fontWeight: '700' }}>What's in your pantry?</h2>
           
-          <div style={{ position: 'relative', marginBottom: '20px' }}>
-            <input 
-              className="custom-input"
-              type="text" 
-              placeholder="Type an ingredient (e.g. chicken, tomato)..." 
-              value={inputText}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown} 
-              style={{ width: '100%', padding: '16px', fontSize: '16px', borderRadius: '10px', boxSizing: 'border-box' }}
-            />
-            {suggestions.length > 0 && (
-              <ul style={{ 
-                listStyle: 'none', padding: 0, margin: '4px 0 0 0', 
-                border: '1px solid var(--border-color)', borderRadius: '10px',
-                position: 'absolute', width: '100%', backgroundColor: 'var(--card-bg)', zIndex: 100,
-                boxShadow: 'var(--shadow)', overflow: 'hidden'
-              }}>
-                {suggestions.map((ing, index) => {
-                  const isActive = index === activeIndex;
-                  return (
-                    <li 
-                      key={ing.id} 
-                      className="suggestion-item"
-                      onClick={() => addIngredient(ing)}
-                      onMouseEnter={() => setActiveIndex(index)} 
-                      style={{ 
-                        padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)',
-                        backgroundColor: isActive ? 'var(--hover-bg)' : 'transparent',
-                        color: 'var(--text-main)', fontSize: '15px'
-                      }}
-                    >
-                      {ing.name}
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+            
+            <div style={{ position: 'relative', flex: 1 }}>
+              <input 
+                className="custom-input"
+                type="text" 
+                placeholder="Type an ingredient (e.g. chicken)" 
+                value={inputText}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown} 
+                style={{ width: '100%', padding: '16px', fontSize: '16px', borderRadius: '10px', boxSizing: 'border-box' }}
+              />
+              
+              {suggestions.length > 0 && (
+                <ul style={{ 
+                  listStyle: 'none', padding: 0, margin: '4px 0 0 0', 
+                  border: '1px solid var(--border-color)', borderRadius: '10px',
+                  position: 'absolute', width: '100%', backgroundColor: 'var(--card-bg)', zIndex: 100,
+                  boxShadow: 'var(--shadow)', overflow: 'hidden'
+                }}>
+                  {suggestions.map((ing, index) => {
+                    const isActive = index === activeIndex;
+                    return (
+                      <li 
+                        key={ing.id} 
+                        className="suggestion-item"
+                        onClick={() => addIngredient(ing)}
+                        onMouseEnter={() => setActiveIndex(index)} 
+                        style={{ 
+                          padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)',
+                          backgroundColor: isActive ? 'var(--hover-bg)' : 'transparent',
+                          color: 'var(--text-main)', fontSize: '15px'
+                        }}
+                      >
+                        {ing.name}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <button 
+              className="btn-primary add-btn"
+              onClick={handleAddClick}
+              disabled={!inputText.trim()}
+              style={{ 
+                padding: '0 24px', 
+                background: '#10B981', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '10px', 
+                fontSize: '16px', 
+                fontWeight: '600', 
+                cursor: inputText.trim() ? 'pointer' : 'not-allowed', 
+                opacity: inputText.trim() ? 1 : 0.6 
+              }}
+            >
+              Add
+            </button>
+            
           </div>
 
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '24px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ flex: '1 1 200px' }}>
+          {/* Filters Interface */}
+          <div className="filters-container" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px', alignItems: 'center' }}>
+            
+            <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)', fontWeight: '500' }}>Category</label>
                 <select 
                   className="custom-select"
@@ -414,7 +328,8 @@ function Home() {
                       width: '100%', padding: '14px', borderRadius: '10px',
                       fontSize: '15px', 
                       opacity: categories.length === 0 ? 0.6 : 1,
-                      cursor: categories.length === 0 ? 'not-allowed' : 'pointer'
+                      cursor: categories.length === 0 ? 'not-allowed' : 'pointer',
+                      boxSizing: 'border-box'
                   }}
                 >
                 <option value="">
@@ -426,7 +341,7 @@ function Home() {
                 </select>
             </div>
 
-            <div style={{ flex: '1 1 200px' }}>
+            <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                     <label style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '500' }}>Max Time</label>
                     <span style={{ fontWeight: '600', color: '#10B981', fontSize: '14px' }}>
@@ -438,11 +353,12 @@ function Home() {
                     min="10" max="120" step="5" 
                     value={maxTime} 
                     onChange={(e) => setMaxTime(Number(e.target.value))}
-                    style={{ width: '100%', cursor: 'pointer', accentColor: '#10B981', height: '6px' }}
+                    style={{ width: '100%', cursor: 'pointer', accentColor: '#10B981', height: '6px', boxSizing: 'border-box' }}
                 />
             </div>
           </div>
 
+          {/* Selected Ingredients Tags */}
           {selectedIngredients.length > 0 && (
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '24px', minHeight: '34px' }}>
               {selectedIngredients.map(ing => (
@@ -462,6 +378,7 @@ function Home() {
             </div>
           )}
 
+          {/* Form Actions */}
           <div style={{ display: 'flex', gap: '16px' }}>
             <button 
               className="btn-secondary"
@@ -484,89 +401,74 @@ function Home() {
         </div>
       </div>
 
-      <div style={{ maxWidth: '800px', margin: '0 auto', padding: '0 20px 60px 20px' }}>
+      {/* Results Section */}
+      <div ref={resultsSectionRef} style={{ maxWidth: '1000px', margin: '0 auto', padding: '0 20px 60px 20px', scrollMarginTop: '80px' }}>
         
-        {selectedIngredients.length > 0 && hasSearched && recipes.length === 0 && (
+        {/* Empty State */}
+        {!isLoading && selectedIngredients.length > 0 && hasSearched && processedRecipes.length === 0 && (
           <div className="fade-in" style={{ textAlign: 'center', padding: '30px', border: '1px solid var(--error-border)', borderRadius: '12px', backgroundColor: 'var(--error-bg)' }}>
             <h3 style={{ margin: '0 0 8px 0', color: 'var(--error-text)', fontSize: '18px', fontWeight: '600' }}>No recipes found</h3>
-            <p style={{ margin: 0, color: 'var(--error-sub)', fontSize: '15px' }}>Try changing the category, increasing the cooking time, or adding different ingredients.</p>
+            <p style={{ margin: 0, color: 'var(--error-sub)', fontSize: '15px' }}>
+              {selectedIngredients.length < 3 
+                ? "You've selected very few ingredients. Try adding more items to your pantry to unlock recipes!" 
+                : "Try changing the category, increasing the cooking time, or adding different ingredients."}
+            </p>
           </div>
         )}
 
-        {(showResults || showPopular) && (
+        {/* Recipe Cards & Skeletons */}
+        {(isLoading || showResults || showPopular) && (
           <div className="fade-in">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '700' }}>
-                {showResults ? "Your Matching Recipes" : "Need Inspiration? Popular Recipes"}
+                {isLoading 
+                  ? "Searching your pantry..." 
+                  : (showResults ? "Your Matching Recipes" : "Need Inspiration? Popular Recipes")}
               </h2>
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
-              {(showResults ? recipes : popularRecipes).map((r) => (
-                <Link to={`/recipe/${r.id}`} key={r.id} style={{ textDecoration: 'none', color: 'inherit' }}>
-                  <div className="recipe-card" style={{ 
-                      borderRadius: '16px', overflow: 'hidden', 
-                      position: 'relative', height: '100%', display: 'flex', flexDirection: 'column'
-                    }}>
-                      
-                      {showResults && (
-                        <div style={{ 
-                          position: 'absolute', top: '12px', right: '12px', 
-                          backgroundColor: r.missingCount === 0 ? '#10B981' : '#F59E0B',
-                          color: 'white', padding: '6px 12px', borderRadius: '20px', 
-                          fontSize: '12px', fontWeight: '600', letterSpacing: '0.3px',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                        }}>
-                          {r.missingCount === 0 ? "Ready to Cook" : `Missing ${r.missingCount}`}
-                        </div>
-                      )}
-
-                      {showPopular && (
-                        <div style={{ 
-                          position: 'absolute', top: '12px', right: '12px', 
-                          backgroundColor: '#3B82F6', color: 'white', padding: '6px 12px', 
-                          borderRadius: '20px', fontSize: '12px', fontWeight: '600', letterSpacing: '0.3px',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                        }}>
-                          Popular 🔥
-                        </div>
-                      )}
-
-                      {r.image_url ? (
-                        <img src={r.image_url} alt={r.title} style={{width: '100%', height: '200px', objectFit: 'cover'}} />
-                      ) : (
-                        <div style={{ width: '100%', height: '200px', backgroundColor: 'var(--hover-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>No Image</div>
-                      )}
-                      
-                      <div style={{ padding: '20px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                        <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: '700', lineHeight: '1.3' }}>{r.title}</h3>
-                        <p style={{ margin: '0 0 16px 0', fontSize: '14px', color: 'var(--text-muted)', fontWeight: '500' }}>
-                          {r.description} • {r.time_minutes} min
-                        </p>
-                        
-                        {showResults && (
-                          <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
-                            <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: '500' }}>
-                              <span style={{ color: '#10B981', fontWeight: '700' }}>{r.essentialMatch}</span> of {r.essentialTotal} ingredients found
-                            </span>
-                          </div>
-                        )}
-
-                        {showPopular && (
-                          <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
-                            <span style={{ fontSize: '14px', color: '#10B981', fontWeight: '600' }}>
-                              View Recipe →
-                            </span>
-                          </div>
-                        )}
+            <div className="recipe-grid">
+              {isLoading ? (
+                Array(6).fill(0).map((_, i) => (
+                  <div key={i} className="recipe-card" style={{ pointerEvents: 'none' }}>
+                    <div className="card-image-wrapper" style={{ backgroundColor: 'var(--hover-bg)', animation: 'pulse 1.5s infinite' }}></div>
+                    <div className="card-content">
+                      <div style={{ height: '24px', backgroundColor: 'var(--hover-bg)', borderRadius: '6px', marginBottom: '12px', width: '70%', animation: 'pulse 1.5s infinite' }}></div>
+                      <div style={{ height: '16px', backgroundColor: 'var(--hover-bg)', borderRadius: '6px', width: '40%', animation: 'pulse 1.5s infinite' }}></div>
+                      <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+                        <div style={{ height: '14px', backgroundColor: 'var(--hover-bg)', borderRadius: '6px', width: '50%', animation: 'pulse 1.5s infinite' }}></div>
                       </div>
+                    </div>
                   </div>
-                </Link>
-              ))}
+                ))
+              ) : (
+                (showResults ? processedRecipes : popularRecipes).map((r) => (
+                  <RecipeCard key={r.id} recipe={r} showResults={showResults} />  
+                ))
+              )}
             </div>
+
+            {/* End of Results Message */}
+            {!isLoading && (
+              <div style={{ textAlign: 'center', marginTop: '48px', paddingBottom: '24px', color: 'var(--text-muted)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '8px' }}>
+                  <div style={{ height: '1px', flex: 1, maxWidth: '60px', backgroundColor: 'var(--border-color)' }}></div>
+                  <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ opacity: 0.5 }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <div style={{ height: '1px', flex: 1, maxWidth: '60px', backgroundColor: 'var(--border-color)' }}></div>
+                </div>
+                <p style={{ fontSize: '15px', margin: 0, fontWeight: '500' }}>
+                  {showResults 
+                    ? (selectedIngredients.length < 3 
+                        ? "That's all we found! Adding a few more ingredients might unlock many more recipes."
+                        : "That's all we found! Try tweaking your filters or ingredients for more.")
+                    : "That's all for now! Add what's in your pantry above to find matches."}
+                </p>
+              </div>
+            )}
           </div>
         )}
-
       </div>
     </div>
   )

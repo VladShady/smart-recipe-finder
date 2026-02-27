@@ -1,0 +1,1 @@
+export const STAPLES = ['water', 'salt', 'oil', 'sugar', 'pepper', 'flour'];
