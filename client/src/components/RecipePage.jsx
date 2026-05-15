@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import IngredientsList from './components/recipe/IngredientsList';
-import InstructionsList from './components/recipe/InstructionsList';
-import { useTheme } from './context/ThemeContext';
-import { STAPLES } from './constants';
+import IngredientsList from './recipe/IngredientsList';
+import InstructionsList from './recipe/InstructionsList';
+import { useAuth } from '../context/AuthContext';
+import AuthModal from './auth/AuthModal';
+import { STAPLES } from '../constants';
+import CookingMode from './CookingMode';
 
 function RecipePage() {
   const { id } = useParams();
@@ -15,6 +17,10 @@ function RecipePage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [checkedItems, setCheckedItems] = useState(new Set());
   const [isExpanded, setIsExpanded] = useState(false);
+  const { isAuthenticated, token } = useAuth();
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isCookingModeOpen, setIsCookingModeOpen] = useState(false);
 
   // Initialize recipe data and pantry matches
   useEffect(() => {
@@ -67,6 +73,48 @@ function RecipePage() {
     fetchRecipe();
   }, [id]);
 
+  // Check if recipe is favorited on load
+  useEffect(() => {
+    if (isAuthenticated && recipe) {
+      const checkFavoriteStatus = async () => {
+        try {
+          const res = await fetch(`http://${window.location.hostname}:5000/api/favorites/check/${id}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          const data = await res.json();
+          setIsFavorited(data.isFavorited);
+        } catch (err) {
+          console.error("Failed to check favorite status", err);
+        }
+      };
+      checkFavoriteStatus();
+    } else {
+      setIsFavorited(false);
+    }
+  }, [id, isAuthenticated, token, recipe]);
+
+  // Handle favorite button click
+  const handleFavoriteClick = async () => {
+    if (!isAuthenticated) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    try {
+      const method = isFavorited ? 'DELETE' : 'POST';
+      const res = await fetch(`http://${window.location.hostname}:5000/api/favorites/${id}`, {
+        method,
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        setIsFavorited(!isFavorited);
+      }
+    } catch (err) {
+      console.error("Failed to toggle favorite", err);
+    }
+  };
+
   const toggleCheck = (idx) => {
     const newChecked = new Set(checkedItems);
     if (newChecked.has(idx)) {
@@ -111,9 +159,30 @@ function RecipePage() {
 
         {/* Recipe Header */}
         <div style={{ marginBottom: '40px' }}>
-          <h1 style={{ margin: '0 0 16px 0', fontSize: 'clamp(32px, 4vw, 48px)', fontWeight: '800', lineHeight: '1.2' }}>
-            {recipe.title}
-          </h1>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px', marginBottom: '16px' }}>
+            <h1 style={{ margin: 0, fontSize: 'clamp(32px, 4vw, 48px)', fontWeight: '800', lineHeight: '1.2' }}>
+              {recipe.title}
+            </h1>
+            
+            <button 
+              onClick={handleFavoriteClick}
+              className="icon-btn"
+              style={{ 
+                background: isFavorited ? 'var(--error-bg)' : 'var(--card-bg)', 
+                border: `1px solid ${isFavorited ? 'var(--error-border)' : 'var(--border-color)'}`, 
+                color: isFavorited ? '#EF4444' : 'var(--text-muted)', 
+                cursor: 'pointer', padding: '12px', borderRadius: '50%', 
+                display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                transition: 'all 0.2s ease', flexShrink: 0,
+                boxShadow: 'var(--shadow)'
+              }}
+              title={isFavorited ? "Remove from favorites" : "Save to favorites"}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill={isFavorited ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+              </svg>
+            </button>
+          </div>
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
             <span style={{ background: 'var(--tag-bg)', color: 'var(--tag-text)', padding: '6px 14px', borderRadius: '20px', fontSize: '14px', fontWeight: '600' }}>
               {recipe.description}
@@ -140,9 +209,36 @@ function RecipePage() {
 
         {/* Instructions Section */}
         <div style={{ width: '100%' }}>
-          <h3 style={{ margin: '0 0 24px 0', fontSize: '24px', fontWeight: '700', color: 'var(--text-main)', borderBottom: '2px solid var(--border-color)', paddingBottom: '12px' }}>
-            Instructions
-          </h3>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            borderBottom: '2px solid var(--border-color)', 
+            paddingBottom: '12px', 
+            marginBottom: '24px' 
+          }}>
+            <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: 'var(--text-main)' }}>
+              Instructions
+            </h3>
+            
+            {/* Показуємо кнопку тільки якщо є кроки для готування */}
+            {recipe?.ai_instructions && (
+              <button
+                onClick={() => setIsCookingModeOpen(true)}
+                style={{
+                  background: '#10B981', color: 'white', border: 'none', padding: '8px 16px',
+                  borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)'
+                }}
+              >
+                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                Start Cooking
+              </button>
+            )}
+          </div>
           
           <div style={{ fontSize: '16px' }}>
             <InstructionsList recipe={recipe} aiLoading={aiLoading} isExpanded={isExpanded} setIsExpanded={setIsExpanded} />
@@ -166,6 +262,18 @@ function RecipePage() {
         </div>
 
       </div>
+      {isCookingModeOpen && recipe.ai_instructions && (
+        <CookingMode 
+          steps={recipe.ai_instructions} 
+          title={recipe.title}
+          onClose={() => setIsCookingModeOpen(false)} 
+        />
+      )}
+
+      <AuthModal 
+        isOpen={isAuthModalOpen} 
+        onClose={() => setIsAuthModalOpen(false)} 
+      />
     </div>
   );
 }

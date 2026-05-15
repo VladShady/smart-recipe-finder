@@ -1,88 +1,100 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from './context/ThemeContext';
+import { useAuth } from './context/AuthContext';
+import AuthModal from './components/auth/AuthModal';
 
 function Header() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { isDark, toggleTheme } = useTheme();
-  
+  const { user, logout, isAuthenticated } = useAuth();
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
   return (
-    <header style={{
-      position: 'sticky',
-      top: 0,
-      zIndex: 1000,
-      backgroundColor: isDark ? 'rgba(31, 41, 55, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-      backdropFilter: 'blur(8px)',
-      WebkitBackdropFilter: 'blur(8px)',
-      borderBottom: `1px solid ${isDark ? '#374151' : '#E5E7EB'}`,
-      transition: 'background-color 0.3s ease, border-color 0.3s ease',
-      fontFamily: '"Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
-    }}>
-      <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '0 20px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <>
+      <header className="header-container" style={{ 
+        padding: '16px 20px', 
+        backgroundColor: 'var(--card-bg)', 
+        borderBottom: '1px solid var(--border-color)', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'space-between',
+        position: 'sticky',
+        top: 0,
+        zIndex: 50,
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+        transition: 'background-color 0.3s ease'
+      }}>
         
-        {/* Brand Logo */}
-        <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px', color: isDark ? '#F9FAFB' : '#111827' }}>
-          <div style={{ background: '#10B981', color: 'white', borderRadius: '8px', padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+        {/* Логотип */}
+        <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ width: '36px', height: '36px', backgroundColor: '#10B981', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: '18px' }}>
+            R
           </div>
-          <span style={{ fontSize: '20px', fontWeight: '800', letterSpacing: '-0.5px' }}>Pantry<span style={{ color: '#10B981' }}>Chef</span></span>
+          <span style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-main)', letterSpacing: '-0.5px' }}>
+            Recipe<span style={{ color: '#10B981' }}>Finder</span>
+          </span>
         </Link>
 
-        {/* Desktop Navigation */}
-        <div className="desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-          <Link to="/" style={{ textDecoration: 'none', color: isDark ? '#D1D5DB' : '#4B5563', fontWeight: '500', fontSize: '15px', transition: 'color 0.2s ease' }} className="nav-link">Home</Link>
-          <Link to="#" onClick={(e) => { e.preventDefault(); alert('Saved Recipes coming soon!'); }} style={{ textDecoration: 'none', color: isDark ? '#D1D5DB' : '#4B5563', fontWeight: '500', fontSize: '15px', transition: 'color 0.2s ease' }} className="nav-link">Favorites</Link>
+        {/* Права частина з кнопками */}
+        <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           
-          <div style={{ width: '1px', height: '24px', backgroundColor: isDark ? '#374151' : '#E5E7EB', margin: '0 8px' }}></div>
-          
-          {/* Theme Toggle Button */}
-          <button onClick={toggleTheme} aria-label="Toggle Theme" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: isDark ? '#F9FAFB' : '#111827', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px', borderRadius: '50%', transition: 'background-color 0.2s ease' }} className="icon-btn">
+          <button 
+            onClick={toggleTheme} 
+            className="icon-btn"
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease' }}
+            aria-label="Toggle theme"
+          >
             {isDark ? (
-              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+              <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
             ) : (
-              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+              <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
             )}
           </button>
 
-          {/* Authentication Placeholder */}
-          <button onClick={() => alert('Authentication coming soon!')} style={{ background: '#10B981', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '8px', fontWeight: '600', fontSize: '14px', cursor: 'pointer', transition: 'transform 0.2s ease' }} className="auth-btn">
-            Sign In
-          </button>
-        </div>
+          {isAuthenticated ? (
+            <>
+              <Link to="/favorites" style={{ textDecoration: 'none', color: 'var(--text-main)', fontWeight: '600', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '6px', transition: 'color 0.2s ease' }}>
+                <svg width="20" height="20" fill="#EF4444" viewBox="0 0 24 24">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                </svg>
+                {/* Клас hide-on-mobile сховає слово на телефонах */}
+                <span className="hide-on-mobile">Favorites</span>
+              </Link>
 
-        {/* Mobile Hamburger Menu Toggle */}
-        <button className="mobile-menu-btn" onClick={() => setIsMenuOpen(!isMenuOpen)} style={{ display: 'none', background: 'transparent', border: 'none', cursor: 'pointer', color: isDark ? '#F9FAFB' : '#111827' }}>
-          <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            {isMenuOpen ? (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            )}
-          </svg>
-        </button>
-      </div>
+              {/* Ховаємо розділювач на телефонах */}
+              <div className="hide-on-mobile" style={{ width: '1px', height: '20px', backgroundColor: 'var(--border-color)' }}></div>
 
-      {/* Mobile Dropdown Navigation */}
-      {isMenuOpen && (
-        <div className="mobile-nav" style={{ padding: '20px', borderBottom: `1px solid ${isDark ? '#374151' : '#E5E7EB'}`, backgroundColor: isDark ? '#1F2937' : '#FFFFFF' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <Link to="/" onClick={() => setIsMenuOpen(false)} style={{ textDecoration: 'none', color: isDark ? '#F9FAFB' : '#111827', fontWeight: '500', fontSize: '16px' }}>Home</Link>
-            <Link to="#" onClick={(e) => { e.preventDefault(); alert('Saved Recipes coming soon!'); setIsMenuOpen(false); }} style={{ textDecoration: 'none', color: isDark ? '#F9FAFB' : '#111827', fontWeight: '500', fontSize: '16px' }}>Favorites</Link>
-            
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px', paddingTop: '16px', borderTop: `1px solid ${isDark ? '#374151' : '#E5E7EB'}` }}>
-              <span style={{ color: isDark ? '#D1D5DB' : '#4B5563', fontWeight: '500' }}>Theme</span>
-              <button onClick={toggleTheme} style={{ background: isDark ? '#374151' : '#F3F4F6', border: 'none', padding: '8px 16px', borderRadius: '8px', color: isDark ? '#F9FAFB' : '#111827', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '500' }}>
-                {isDark ? 'Dark Mode' : 'Light Mode'}
+              {/* Ховаємо email на телефонах */}
+              <span className="hide-on-mobile" style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '500' }}>
+                {user?.email}
+              </span>
+              
+              <button 
+                onClick={logout}
+                className="btn-secondary"
+                style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-main)', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}
+              >
+                Logout
               </button>
-            </div>
-            
-            <button onClick={() => { alert('Authentication coming soon!'); setIsMenuOpen(false); }} style={{ background: '#10B981', color: 'white', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '600', fontSize: '16px', cursor: 'pointer', width: '100%', marginTop: '8px' }}>
-              Sign In / Sign Up
+            </>
+          ) : (
+            <button 
+              className="auth-btn"
+              onClick={() => setIsAuthModalOpen(true)}
+              style={{ padding: '8px 16px', backgroundColor: '#10B981', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s ease' }}
+            >
+              Sign In
             </button>
-          </div>
+          )}
+
         </div>
-      )}
-    </header>
+      </header>
+
+      <AuthModal 
+        isOpen={isAuthModalOpen} 
+        onClose={() => setIsAuthModalOpen(false)} 
+      />
+    </>
   );
 }
 
