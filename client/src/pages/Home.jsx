@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { useTheme } from './context/ThemeContext';
-import RecipeCard from './components/RecipeCard';
-import HeroSection from './components/home/HeroSection';
-import { STAPLES } from './constants';
+import { useTheme } from '../context/ThemeContext';
+import RecipeCard from '../components/recipe/RecipeCard';
+import HeroSection from '../components/home/HeroSection';
+import { STAPLES } from '../utils/constants';
 
 function Home() {
-  // State management with session persistence
   const [inputText, setInputText] = useState("") 
   const [suggestions, setSuggestions] = useState([]) 
   const [activeIndex, setActiveIndex] = useState(-1)
@@ -36,7 +35,7 @@ function Home() {
 
   const searchSectionRef = useRef(null);
   const resultsSectionRef = useRef(null);
-  const debounceTimer = useRef(null); // Timer reference for debouncing search input
+  const debounceTimer = useRef(null); 
 
   // Auto-scroll on component mount when returning from recipe details
   useEffect(() => {
@@ -91,7 +90,7 @@ function Home() {
     fetchCategories();
   }, [selectedIngredients]);
 
-  // Handle autocomplete input with debouncing
+  // Handle autocomplete input
   const handleInputChange = (e) => {
     const text = e.target.value;
     setInputText(text);
@@ -228,7 +227,7 @@ function Home() {
         resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 50);
     } catch (err) {
-      console.error("Помилка пошуку:", err);
+      console.error("Search error:", err);
     } finally {
       setIsLoading(false);
     }

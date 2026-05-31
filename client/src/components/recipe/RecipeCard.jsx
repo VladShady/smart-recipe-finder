@@ -9,11 +9,6 @@ function RecipeCard({ recipe, showResults }) {
             {recipe.missingCount === 0 ? "Ready to Cook" : `Missing ${recipe.missingCount}`}
           </div>
         )}
-        {!showResults && (
-          <div className="card-badge" style={{ backgroundColor: '#3B82F6' }}>
-            Popular 🔥
-          </div>
-        )}
 
         {recipe.image_url ? (
           <img src={recipe.image_url} alt={recipe.title} loading="lazy" />

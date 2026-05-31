@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useTheme } from './context/ThemeContext';
-import { useAuth } from './context/AuthContext';
-import AuthModal from './components/auth/AuthModal';
+import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
+import AuthModal from '../auth/AuthModal';
 
 function Header() {
   const { isDark, toggleTheme } = useTheme();
@@ -25,7 +25,6 @@ function Header() {
         transition: 'background-color 0.3s ease'
       }}>
         
-        {/* Логотип */}
         <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ width: '36px', height: '36px', backgroundColor: '#10B981', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: '18px' }}>
             R
@@ -35,7 +34,6 @@ function Header() {
           </span>
         </Link>
 
-        {/* Права частина з кнопками */}
         <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           
           <button 
@@ -57,14 +55,11 @@ function Header() {
                 <svg width="20" height="20" fill="#EF4444" viewBox="0 0 24 24">
                   <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
                 </svg>
-                {/* Клас hide-on-mobile сховає слово на телефонах */}
                 <span className="hide-on-mobile">Favorites</span>
               </Link>
 
-              {/* Ховаємо розділювач на телефонах */}
               <div className="hide-on-mobile" style={{ width: '1px', height: '20px', backgroundColor: 'var(--border-color)' }}></div>
 
-              {/* Ховаємо email на телефонах */}
               <span className="hide-on-mobile" style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '500' }}>
                 {user?.email}
               </span>

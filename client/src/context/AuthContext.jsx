@@ -23,7 +23,6 @@ export function AuthProvider({ children }) {
     setIsAuthLoading(false);
   }, []);
 
-  // Login function to update state and storage
   const login = (userData, jwtToken) => {
     setToken(jwtToken);
     setUser(userData);
@@ -31,7 +30,6 @@ export function AuthProvider({ children }) {
     localStorage.setItem('authUser', JSON.stringify(userData));
   };
 
-  // Logout function to clear state and storage
   const logout = () => {
     setToken(null);
     setUser(null);

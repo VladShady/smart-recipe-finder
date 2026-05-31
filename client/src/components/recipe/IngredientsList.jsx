@@ -1,4 +1,4 @@
-import { STAPLES } from '../../constants';
+import { STAPLES } from '../../utils/constants';
 
 function IngredientsList({ recipe, checkedItems, toggleCheck }) {
   if (!recipe || !recipe.ingredients_list) return null;

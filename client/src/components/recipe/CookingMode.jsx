@@ -3,10 +3,11 @@ import { useState, useEffect, useRef } from 'react';
 function CookingMode({ steps, title, onClose }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(null);
+  const [initialTime, setInitialTime] = useState(null);
   const [timerActive, setTimerActive] = useState(false);
   const timerRef = useRef(null);
 
-  // 1. Wake Lock API: Prevent screen from sleeping
+  // Prevent screen from sleeping
   useEffect(() => {
     let wakeLock = null;
     
@@ -29,16 +30,13 @@ function CookingMode({ steps, title, onClose }) {
     };
   }, []);
 
-  // 2. Smart Timer: Extract minutes/seconds from text
   useEffect(() => {
-    // Reset timer when step changes
     setTimerActive(false);
     setTimeLeft(null);
+    setInitialTime(null);
     clearInterval(timerRef.current);
 
     const currentText = steps[currentIndex]?.step || steps[currentIndex] || '';
-    
-    // Regex to find things like "15 minutes", "2 mins", "30 seconds"
     const timeMatch = currentText.match(/(\d+)\s*(min|minute|sec|second|hr|hour)s?/i);
     
     if (timeMatch) {
@@ -50,27 +48,36 @@ function CookingMode({ steps, title, onClose }) {
       else if (unit.startsWith('min')) seconds = value * 60;
       else if (unit.startsWith('hr') || unit.startsWith('hour')) seconds = value * 3600;
       
-      if (seconds > 0) setTimeLeft(seconds);
+      if (seconds > 0) {
+        setTimeLeft(seconds);
+        setInitialTime(seconds);
+      }
     }
   }, [currentIndex, steps]);
 
-  // Timer countdown logic
   useEffect(() => {
     if (timerActive && timeLeft > 0) {
       timerRef.current = setInterval(() => {
         setTimeLeft(prev => prev - 1);
       }, 1000);
-    } else if (timeLeft === 0) {
+    } else if (timerActive && timeLeft === 0) {
       clearInterval(timerRef.current);
       setTimerActive(false);
-      // Optional: Play a sound here
-      alert("Time is up!"); 
+      
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+      audio.play().catch(e => console.error("Audio is blocked by the browser:", e));
     }
 
     return () => clearInterval(timerRef.current);
   }, [timerActive, timeLeft]);
 
   const toggleTimer = () => setTimerActive(!timerActive);
+
+  const handleReset = () => {
+    setTimerActive(false);
+    setTimeLeft(initialTime);
+    clearInterval(timerRef.current);
+  };
 
   const formatTime = (totalSeconds) => {
     const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
@@ -117,7 +124,7 @@ function CookingMode({ steps, title, onClose }) {
         </button>
       </div>
 
-      {/* Main Content (Step Text) */}
+      {/* Main Content */}
       <div style={{ 
         flex: 1, 
         display: 'flex', 
@@ -131,7 +138,6 @@ function CookingMode({ steps, title, onClose }) {
         padding: '20px 0'
       }}>
         
-        {/* Додаємо key={currentIndex}, щоб React перемальовував цей блок з нуля при кожному кроці */}
         <div key={currentIndex} className="step-animate" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           
           <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#10B981', marginBottom: '24px', textTransform: 'uppercase', letterSpacing: '2px' }}>
@@ -144,23 +150,32 @@ function CookingMode({ steps, title, onClose }) {
             lineHeight: '1.4', 
             margin: '0 0 40px 0', 
             color: 'var(--text-main)'
-            /* Ми прибрали transition, тепер за плавність відповідає CSS-клас step-animate */
           }}>
             {currentStepText}
           </p>
 
           {/* Smart Timer UI */}
           {timeLeft !== null && (
-            <div style={{ background: 'var(--card-bg)', border: '2px solid #10B981', borderRadius: '20px', padding: '20px 40px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+            <div style={{ background: 'var(--card-bg)', border: '2px solid #10B981', borderRadius: '20px', padding: '20px 40px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', marginTop: '20px' }}>
               <span style={{ fontSize: '48px', fontWeight: '800', fontFamily: 'monospace', color: timeLeft === 0 ? '#EF4444' : 'var(--text-main)' }}>
                 {formatTime(timeLeft)}
               </span>
-              <button 
-                onClick={toggleTimer}
-                style={{ background: timerActive ? '#EF4444' : '#10B981', color: 'white', border: 'none', padding: '12px 32px', borderRadius: '12px', fontSize: '20px', fontWeight: 'bold', cursor: 'pointer', width: '100%' }}
-              >
-                {timeLeft === 0 ? 'Done!' : (timerActive ? 'Pause' : 'Start Timer')}
-              </button>
+              
+              <div style={{ display: 'flex', gap: '12px', width: '100%', minWidth: '240px' }}>
+                <button 
+                  onClick={toggleTimer}
+                  style={{ flex: 1, background: timerActive ? '#F59E0B' : '#10B981', color: 'white', border: 'none', padding: '12px 16px', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.2s' }}
+                >
+                  {timeLeft === 0 ? 'Done!' : (timerActive ? 'Pause' : 'Start')}
+                </button>
+                
+                <button 
+                  onClick={handleReset}
+                  style={{ flex: 1, background: 'transparent', color: 'var(--text-main)', border: '2px solid var(--border-color)', padding: '12px 16px', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', transition: 'border-color 0.2s' }}
+                >
+                  Reset
+                </button>
+              </div>
             </div>
           )}
 

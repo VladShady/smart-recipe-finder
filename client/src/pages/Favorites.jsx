@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from './context/AuthContext';
-import RecipeCard from './components/RecipeCard';
+import { useAuth } from '../context/AuthContext';
+import RecipeCard from '../components/recipe/RecipeCard';
 
 function Favorites() {
   const { token, isAuthenticated } = useAuth();

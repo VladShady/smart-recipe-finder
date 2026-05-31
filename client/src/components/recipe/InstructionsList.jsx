@@ -1,13 +1,12 @@
 function InstructionsList({ recipe, aiLoading, isExpanded, setIsExpanded }) {
   if (!recipe) return null;
 
-  // Відображення скелетону під час генерації ШІ
   if (aiLoading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div style={{ padding: '24px', textAlign: 'center', color: '#10B981', fontWeight: '600', backgroundColor: 'var(--tag-bg)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
           <div className="spinner"></div>
-          AI is formatting the perfect steps for you...
+          Formatting the perfect steps for you...
         </div>
         {[1, 2, 3].map((skeleton) => (
           <div key={skeleton} className="skeleton-card">

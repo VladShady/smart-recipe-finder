@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import IngredientsList from './recipe/IngredientsList';
-import InstructionsList from './recipe/InstructionsList';
+import IngredientsList from '../components/recipe/IngredientsList';
+import InstructionsList from '../components/recipe/InstructionsList';
 import { useAuth } from '../context/AuthContext';
-import AuthModal from './auth/AuthModal';
-import { STAPLES } from '../constants';
-import CookingMode from './CookingMode';
+import AuthModal from '../components/auth/AuthModal';
+import { STAPLES } from '../utils/constants';
+import CookingMode from '../components/recipe/CookingMode';
 
 function RecipePage() {
   const { id } = useParams();
   
-  // Component state
   const [recipe, setRecipe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -22,16 +21,13 @@ function RecipePage() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isCookingModeOpen, setIsCookingModeOpen] = useState(false);
 
-  // Initialize recipe data and pantry matches
   useEffect(() => {
     const fetchRecipe = async () => {
       try {
-        // Fetch primary recipe details
         const res = await fetch(`http://${window.location.hostname}:5000/api/recipes/${id}`);
         if (!res.ok) throw new Error('Recipe not found');
         const data = await res.json();
         
-        // Auto-check ingredients present in user's pantry or common staples
         const savedMyIngredients = sessionStorage.getItem('myIngredients');
         const myIngredients = savedMyIngredients ? JSON.parse(savedMyIngredients) : [];
         const initialChecked = new Set();
@@ -49,7 +45,7 @@ function RecipePage() {
         setRecipe(data);
         setLoading(false); 
 
-        // Fetch AI-formatted instructions asynchronously
+        // Fetch AI-formatted instructions
         if (!data.ai_instructions) {
           setAiLoading(true);
           try {
@@ -73,7 +69,6 @@ function RecipePage() {
     fetchRecipe();
   }, [id]);
 
-  // Check if recipe is favorited on load
   useEffect(() => {
     if (isAuthenticated && recipe) {
       const checkFavoriteStatus = async () => {
@@ -93,7 +88,6 @@ function RecipePage() {
     }
   }, [id, isAuthenticated, token, recipe]);
 
-  // Handle favorite button click
   const handleFavoriteClick = async () => {
     if (!isAuthenticated) {
       setIsAuthModalOpen(true);
@@ -125,7 +119,6 @@ function RecipePage() {
     setCheckedItems(newChecked);
   };
 
-  // Extract YouTube embed ID
   const getEmbedUrl = (url) => {
     if (!url) return null;
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
@@ -221,7 +214,6 @@ function RecipePage() {
               Instructions
             </h3>
             
-            {/* Показуємо кнопку тільки якщо є кроки для готування */}
             {recipe?.ai_instructions && (
               <button
                 onClick={() => setIsCookingModeOpen(true)}
